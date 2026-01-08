@@ -1,0 +1,374 @@
+<!-- index.html（完全版）1/2 -->
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <title></title>
+  <style>
+    html, body {
+      margin: 0; padding: 0;
+      height: 100%;
+      background-color: #263238;
+      color: white;
+      font-family: sans-serif;
+      overflow: hidden;
+      display: flex; flex-direction: column; justify-content: space-between;
+    }
+    #title_area {
+      font-size: 5vh;
+      position: fixed;
+      top: 1vh; left: 50%;
+      transform: translateX(-50%);
+      z-index: 20;
+      cursor: pointer;
+    }
+    #now_time {
+      font-size: 9vh;
+      position: fixed;
+      top: 9vh; left: 50%;
+      transform: translateX(-50%);
+      z-index: 10;
+      padding: 0.5vh 2vw;
+      border: 4px solid white;
+      border-radius: 12px;
+      background-color: rgba(255,255,255,0.1);
+    }
+    #resetButton {
+      position: fixed;
+      top: 1vh; right: 1vw;
+      width: 3vw; height: 5vh;
+      background-color: #1c252b;
+      border: none;
+      opacity: 0.7;
+      z-index: 5;
+    }
+    #resetButton:hover {
+      opacity: 0.95;
+      cursor: pointer;
+    }
+    section#main {
+      flex: 1;
+      display: flex;
+      justify-content: flex-start;
+      align-items: center;
+      margin-top: 25vh;
+      padding-left: 8vw;
+    }
+    #minutes, #seconds {
+      font-size: 26vh;
+    }
+    .unit {
+      font-size: 8vh;
+      margin: 0 1vw;
+    }
+    section#controller {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 4vw;
+      margin-bottom: 6vh;
+    }
+    button {
+      font-size: 2.4vh;
+      padding: 1.2vh 2.4vw;
+      border-radius: 8px;
+      border: none;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+      transition: all 0.2s ease;
+      cursor: pointer;
+    }
+    #wrap {
+      font-size: 3.1vh;
+      padding: 6vh 7.2vw;
+      border-radius: 12px;
+      background-color: #ffeb3b;
+      color: #000;
+      font-weight: bold;
+      border: 2px solid #fdd835;
+    }
+    #startButton {
+      background-color: #fafafa;
+      color: #263238;
+    }
+    #endButton {
+      background-color: #e91e63;
+      color: white;
+      position: absolute;
+      left: 2vw;
+    }
+    button:disabled {
+      background-color: #444 !important;
+      color: #999 !important;
+      cursor: not-allowed;
+      opacity: 0.6;
+    }
+    section#wrapWrapper {
+      position: fixed;
+      top: 20vh;
+      right: 2vw;
+      max-height: 75vh;
+      overflow-y: auto;
+      font-size: 3vh;
+    }
+    #wrapList {
+      list-style: none;
+      padding-left: 0;
+    }
+    .wrap_item {
+      margin-bottom: 1vh;
+      white-space: nowrap;
+    }
+    .over30 {
+      color: red;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <p id="title_area"></p>
+  <p id="now_time">--:--:--</p>
+  <button id="resetButton" aria-label="reset"></button>
+  <section id="main">
+    <p id="timer">
+      <span id="minutes">000</span><span class="unit">分</span>
+      <span id="seconds">00</span><span class="unit">秒</span>
+    </p>
+  </section>
+  <section id="controller">
+    <button id="endButton" disabled>作業終了(END)</button>
+    <button id="startButton">開始(START)</button>
+    <button id="wrap" disabled>ラップ (LAP)</button>
+  </section>
+  <section id="wrapWrapper">
+    <h1>LAP TIME</h1>
+    <ol id="wrapList"></ol>
+  </section>
+<!-- index.html（完全版）2/2 -->
+  <script>
+    const nowTimeLbl = document.getElementById("now_time");
+    const minutesLbl = document.getElementById("minutes");
+    const secondsLbl = document.getElementById("seconds");
+    const startBtn = document.getElementById("startButton");
+    const resetBtn = document.getElementById("resetButton");
+    const endBtn = document.getElementById("endButton");
+    const wrapBtn = document.getElementById("wrap");
+    const wrapListDom = document.getElementById("wrapList");
+    const titleArea = document.getElementById("title_area");
+
+    let timer = null;
+    let startTime = 0;
+    let passTime = 0;
+    let wrapList = [];
+    let lastStartDate = null;
+    let isManuallyBlocked = false;
+    let pauseStartTime = 0;
+    let pausedDuration = 0;
+
+    const params = new URLSearchParams(window.location.search);
+    let customTitle = params.get("title");
+    if (customTitle) {
+      titleArea.textContent = customTitle;
+      document.title = customTitle;
+    }
+
+    titleArea.addEventListener("click", () => {
+      const newTitle = prompt("新しいタイトルを入力してください：", titleArea.textContent);
+      if (newTitle && newTitle.trim() !== "") {
+        customTitle = newTitle;
+        titleArea.textContent = customTitle;
+        document.title = customTitle;
+        const newParams = new URLSearchParams(window.location.search);
+        newParams.set("title", customTitle);
+        const newUrl = `${window.location.pathname}?${newParams.toString()}`;
+        window.history.replaceState(null, "", newUrl);
+      }
+    });
+
+    const zeroPad = (num, digits) => String(num).padStart(digits, "0");
+
+    const blockedTimeRanges = [
+      ["10:15", "10:25"], ["12:15", "13:00"], ["15:00", "15:10"],
+      ["17:10", "17:20"], ["19:20", "19:30"], ["22:15", "22:25"],
+      ["00:15", "01:00"], ["03:00", "03:10"], ["05:10", "05:20"], ["07:20", "07:30"]
+    ];
+
+    const isBlockedTime = () => {
+      const now = new Date();
+      const current = `${zeroPad(now.getHours(),2)}:${zeroPad(now.getMinutes(),2)}`;
+      return blockedTimeRanges.some(([start, end]) => {
+        if (start > end) return current >= start || current < end;
+        return current >= start && current < end;
+      }) || isManuallyBlocked;
+    };
+
+    const getPassTime = () => {
+      const now = new Date().getTime();
+      if (pauseStartTime && isManuallyBlocked) {
+        return Math.floor((pauseStartTime - startTime - pausedDuration) / 1000);
+      }
+      return Math.floor((now - startTime - pausedDuration) / 1000);
+    };
+
+    const countUp = () => {
+      passTime = getPassTime();
+      minutesLbl.innerText = zeroPad(Math.floor(passTime / 60), 3);
+      secondsLbl.innerText = zeroPad(passTime % 60, 2);
+    };
+
+    const updateNowTime = () => {
+      const now = new Date();
+      nowTimeLbl.innerText = `${zeroPad(now.getHours(),2)}:${zeroPad(now.getMinutes(),2)}:${zeroPad(now.getSeconds(),2)}`;
+
+      if (isBlockedTime()) {
+        if (timer) {
+          pauseStartTime = new Date().getTime();
+          clearInterval(timer);
+          timer = null;
+        }
+      } else {
+        if (!timer && startTime !== 0) {
+          pausedDuration += new Date().getTime() - pauseStartTime;
+          timer = setInterval(countUp, 100);
+        }
+      }
+
+      startBtn.disabled = !(startTime === 0);
+    };
+    setInterval(updateNowTime, 1000);
+    updateNowTime();
+
+    const setupTimer = () => {
+      passTime = 0;
+      pausedDuration = 0;
+      pauseStartTime = 0;
+      isManuallyBlocked = false;
+      minutesLbl.innerText = zeroPad(0, 3);
+      secondsLbl.innerText = zeroPad(0, 2);
+      wrapList = [];
+      wrapListDom.innerHTML = "";
+      startTime = 0;
+      endBtn.disabled = true;
+      wrapBtn.disabled = true;
+    };
+
+    const startTimer = () => {
+      if (timer || startTime !== 0 || isBlockedTime()) return;
+      startTime = new Date().getTime();
+      lastStartDate = new Date();
+      timer = setInterval(countUp, 100);
+      startBtn.disabled = true;
+      wrapBtn.disabled = false;
+    };
+
+    const resetTimerOnly = () => {
+      clearInterval(timer);
+      timer = null;
+      setupTimer();
+      startBtn.disabled = false;
+    };
+
+    const resetTimerAndDownload = () => {
+      if (wrapList.length > 0) downloadMemo();
+      resetTimerOnly();
+    };
+
+    const getBlockedDuration = (start, end) => {
+      let total = 0;
+      for (const [from, to] of blockedTimeRanges) {
+        const [fh, fm] = from.split(":").map(Number);
+        const [th, tm] = to.split(":").map(Number);
+        let fromTime = new Date(start);
+        fromTime.setHours(fh, fm, 0, 0);
+        let toTime = new Date(start);
+        toTime.setHours(th, tm, 0, 0);
+        if (from > to) toTime.setDate(toTime.getDate() + 1);
+        if (end > fromTime && start < toTime) {
+          const overlapStart = Math.max(start.getTime(), fromTime.getTime());
+          const overlapEnd = Math.min(end.getTime(), toTime.getTime());
+          total += Math.max(0, overlapEnd - overlapStart);
+        }
+      }
+      return total;
+    };
+
+    const addWrap = () => {
+      const now = new Date();
+      const wrapEnd = now;
+      const wrapStart = lastStartDate ? lastStartDate : wrapEnd;
+
+      const blocked = getBlockedDuration(wrapStart, wrapEnd);
+      const wrapTime = Math.floor((wrapEnd - wrapStart - blocked) / 1000);
+
+      const startStr = `${zeroPad(wrapStart.getHours(),2)}:${zeroPad(wrapStart.getMinutes(),2)}`;
+      const endStr = `${zeroPad(wrapEnd.getHours(),2)}:${zeroPad(wrapEnd.getMinutes(),2)}`;
+      const wrapStr = `${zeroPad(Math.floor(wrapTime / 60),2)}分${zeroPad(wrapTime % 60,2)}秒`;
+
+      const text = `${wrapList.length+1}回目 ${startStr}～${endStr}　${wrapStr}`;
+
+      const li = document.createElement("li");
+      li.className = "wrap_item";
+      li.textContent = text;
+      if (wrapTime >= 1800) li.classList.add("over30");
+      wrapListDom.appendChild(li);
+      wrapList.push(text);
+      endBtn.disabled = false;
+
+      if (!timer && (isManuallyBlocked || isBlockedTime())) {
+        pausedDuration += new Date().getTime() - pauseStartTime;
+        isManuallyBlocked = false;
+        startTime = new Date().getTime();
+        lastStartDate = new Date();
+        pausedDuration = 0;
+        passTime = 0;
+        timer = setInterval(countUp, 100);
+      } else if (timer) {
+        startTime = now.getTime();
+        lastStartDate = now;
+        pausedDuration = 0;
+        passTime = 0;
+      }
+    };
+
+    const downloadMemo = () => {
+      const now = new Date();
+      const dateStr = `${zeroPad(now.getFullYear(),4)}${zeroPad(now.getMonth()+1,2)}${zeroPad(now.getDate(),2)}_${zeroPad(now.getHours(),2)}${zeroPad(now.getMinutes(),2)}${zeroPad(now.getSeconds(),2)}`;
+      const titleSafe = (customTitle || "記録").replace(/[^a-zA-Z0-9一-龯_]/g, "_");
+      const fileName = `${titleSafe}_ラップタイム_${dateStr}.txt`;
+      const header = `【${customTitle || "ラップタイム"} 記録】\n\n`;
+      const body = wrapList.join("\n");
+      const blob = new Blob([header + body], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fileName;
+      a.click();
+      URL.revokeObjectURL(url);
+    };
+
+    window.addEventListener("load", () => {
+      setupTimer();
+      startBtn.addEventListener("click", startTimer);
+      resetBtn.addEventListener("click", resetTimerOnly);
+      endBtn.addEventListener("click", resetTimerAndDownload);
+      wrapBtn.addEventListener("click", addWrap);
+    });
+
+    secondsLbl.addEventListener("click", () => {
+      if (!isManuallyBlocked) {
+        isManuallyBlocked = true;
+        pauseStartTime = new Date().getTime();
+        if (timer) {
+          clearInterval(timer);
+          timer = null;
+        }
+      } else {
+        isManuallyBlocked = false;
+        pausedDuration += new Date().getTime() - pauseStartTime;
+        if (!timer && startTime !== 0) {
+          timer = setInterval(countUp, 100);
+        }
+      }
+    });
+  </script>
+</body>
+</html>
