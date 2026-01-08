@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <title>ラップタイマー</title>
+  <style>
+    html, body {
+      height: 100%; margin: 0; padding: 0;
+      background-color: #263238; color: white;
+      font-family: sans-serif; overflow: hidden;
+      display: flex; flex-direction: column; justify-content: space-between;
+    }
+    #now_time {
+      font-size: 5vh;
+      position: fixed; top: 1vh; left: 50%; transform: translateX(-50%);
+      z-index: 10;
+    }
+    #reset {
+      position: fixed; top: 2vh; left: 2vw;
+      font-size: 2.5vh; padding: 0.7vh 1.5vw;
+      z-index: 10;
+    }
+    section#main {
+      flex: 1; display: flex;
+      justify-content: center; align-items: center;
+      margin-top: 8vh;
+    }
+    #minutes, #seconds {
+      font-size: 26vh;
+    }
+    .unit {
+      font-size: 8vh; margin: 0 1vw;
+    }
+    section#controller {
+      display: flex; justify-content: center; align-items: center;
+      gap: 4vw; margin-bottom: 6vh;
+    }
+    #startButton, #reset, #wrap {
+      font-size: 2.4vh;
+      padding: 1.2vh 2.4vw;
+      border-radius: 8px;
+      border: none;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+      transition: background-color 0.2s, transform 0.1s, filter 0.2s;
+      cursor: pointer;
+    }
+    #wrap {
+      font-size: 3.1vh;
+      padding: 3.12vh 3.12vw; /* ← 縦サイズを2倍に */
+      border-radius: 12px;
+      background-color: #ffeb3b;
+      color: #000;
+      font-weight: bold;
+      border: 2px solid #fdd835;
+    }
+   #startButton {
+  background-color: #fafafa;
+  color: #263238;
+  font-size: 5.5vh;
+  padding: 5.0vh 7.4vw;
+}
+    }
+    #startButton:hover, #reset:hover, #wrap:hover {
+      transform: scale(1.05);
+      filter: brightness(1.1);
+    }
+    #startButton:disabled, #wrap:disabled, #reset:disabled {
+      background-color: #aaa !important;
+      color: #444 !important;
+      cursor: not-allowed !important;
+      opacity: 0.6;
+    }
+    section#wrapWrapper {
+      position: fixed;
+      top: 10vh;
+      right: 2vw;
+      max-height: 80vh;
+      overflow-y: auto;
+      font-size: 2.5vh;
+    }
+    #wrapList { list-style: none; padding-left: 0; }
+    .wrap_item { margin-bottom: 1vh; white-space: nowrap; }
+  </style>
+</head>
+<body>
+  <p id="now_time">--:--:--</p>
+  <section id="main">
+    <p id="timer">
+      <span id="minutes">000</span><span class="unit">分</span>
+      <span id="seconds">00</span><span class="unit">秒</span>
+    </p>
+  </section>
+  <section id="controller">
+    <button id="reset">リセット</button>
+    <button id="startButton">開始</button>
+    <button id="wrap">ラップ</button>
+  </section>
+  <section id="wrapWrapper">
+    <h1>ラップタイム</h1>
+    <ol id="wrapList"></ol>
+  </section>
+  <script>
+    const nowTimeLbl = document.getElementById("now_time");
+    const minutesLbl = document.getElementById("minutes");
+    const secondsLbl = document.getElementById("seconds");
+    const startBtn = document.getElementById("startButton");
+    const resetBtn = document.getElementById("reset");
+    const wrapBtn = document.getElementById("wrap");
+    const wrapListDom = document.getElementById("wrapList");
+
+    let timer = null;
+    let startTime = 0;
+    let passTime = 0;
+    let wrapList = [];
+    let lastStartDate = null;
+
+    const zeroPad = (num, digits) => String(num).padStart(digits, "0");
+
+    const updateNowTime = () => {
+      const now = new Date();
+      nowTimeLbl.innerText = `${zeroPad(now.getHours(),2)}時${zeroPad(now.getMinutes(),2)}分${zeroPad(now.getSeconds(),2)}秒`;
+    };
+    setInterval(updateNowTime, 1000);
+    updateNowTime();
+
+    const setupTimer = () => {
+      passTime = 0;
+      minutesLbl.innerText = zeroPad(0, 3);
+      secondsLbl.innerText = zeroPad(0, 2);
+    };
+
+    const getPassTime = () => Math.floor((new Date().getTime() - startTime) / 1000);
+
+    const countUp = () => {
+      passTime = getPassTime();
+      minutesLbl.innerText = zeroPad(Math.floor(passTime / 60), 3);
+      secondsLbl.innerText = zeroPad(passTime % 60, 2);
+    };
+
+    const startTimer = () => {
+      if (timer) clearInterval(timer);
+      startBtn.disabled = true;
+      wrapBtn.disabled = false;
+      startTime = new Date().getTime();
+      lastStartDate = new Date();
+      timer = setInterval(countUp, 100);
+    };
+
+    const resetTimer = () => {
+      clearInterval(timer);
+      timer = null;
+      setupTimer();
+      startBtn.disabled = false;
+      wrapBtn.disabled = true;
+      wrapList = [];
+      wrapListDom.innerHTML = "";
+    };
+
+    const addWrap = () => {
+      if (!timer) return;
+      const now = new Date();
+      const wrapTime = Math.floor((now.getTime() - startTime) / 1000);
+      const startStr = `${zeroPad(lastStartDate.getHours(),2)}:${zeroPad(lastStartDate.getMinutes(),2)}`;
+      const endStr = `${zeroPad(now.getHours(),2)}:${zeroPad(now.getMinutes(),2)}`;
+      const wrapStr = `${zeroPad(Math.floor(wrapTime / 60),2)}分${zeroPad(wrapTime % 60,2)}秒`;
+
+      const text = `${wrapList.length+1}回目 ${startStr}～${endStr}　${wrapStr}`;
+      const li = document.createElement("li");
+      li.className = "wrap_item";
+      li.textContent = text;
+      wrapListDom.appendChild(li);
+      wrapList.push(text);
+
+      startTime = now.getTime();
+      lastStartDate = now;
+      passTime = 0;
+    };
+
+    window.addEventListener("load", () => {
+      setupTimer();
+      startBtn.addEventListener("click", startTimer);
+      resetBtn.addEventListener("click", resetTimer);
+      wrapBtn.addEventListener("click", addWrap);
+    });
+  </script>
+</body>
+</html>
