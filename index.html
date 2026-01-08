@@ -1,9 +1,13 @@
-<!-- index.html（完全版）1/2 -->
 <!DOCTYPE html>
 <html lang="ja">
 <head>
   <meta charset="utf-8" />
   <title></title>
+
+  <!-- =====================================================
+       完全版（単一ファイルでそのまま動作）
+       ※ style.css を別で用意している場合、下の <link> を有効にすると「外部CSSで上書き」できます
+  ====================================================== -->
   <style>
     html, body {
       margin: 0; padding: 0;
@@ -21,6 +25,7 @@
       transform: translateX(-50%);
       z-index: 20;
       cursor: pointer;
+      user-select: none;
     }
     #now_time {
       font-size: 9vh;
@@ -32,6 +37,7 @@
       border: 4px solid white;
       border-radius: 12px;
       background-color: rgba(255,255,255,0.1);
+      user-select: none;
     }
     #resetButton {
       position: fixed;
@@ -41,6 +47,7 @@
       border: none;
       opacity: 0.7;
       z-index: 5;
+      border-radius: 10px;
     }
     #resetButton:hover {
       opacity: 0.95;
@@ -56,10 +63,12 @@
     }
     #minutes, #seconds {
       font-size: 26vh;
+      user-select: none;
     }
     .unit {
       font-size: 8vh;
       margin: 0 1vw;
+      user-select: none;
     }
     section#controller {
       display: flex;
@@ -113,6 +122,7 @@
     #wrapList {
       list-style: none;
       padding-left: 0;
+      margin: 0;
     }
     .wrap_item {
       margin-bottom: 1vh;
@@ -123,27 +133,35 @@
       font-weight: bold;
     }
   </style>
+
+  <!-- 外部CSSを使う場合は有効化（外部が「後勝ち」で上書きされます）
+  <link rel="stylesheet" href="./style.css">
+  -->
 </head>
+
 <body>
   <p id="title_area"></p>
   <p id="now_time">--:--:--</p>
-  <button id="resetButton" aria-label="reset"></button>
+  <button id="resetButton" aria-label="reset" title="リセット"></button>
+
   <section id="main">
     <p id="timer">
       <span id="minutes">000</span><span class="unit">分</span>
       <span id="seconds">00</span><span class="unit">秒</span>
     </p>
   </section>
+
   <section id="controller">
     <button id="endButton" disabled>作業終了(END)</button>
     <button id="startButton">開始(START)</button>
     <button id="wrap" disabled>ラップ (LAP)</button>
   </section>
+
   <section id="wrapWrapper">
-    <h1>LAP TIME</h1>
+    <h1 style="margin:0 0 1vh 0;">LAP TIME</h1>
     <ol id="wrapList"></ol>
   </section>
-<!-- index.html（完全版）2/2 -->
+
   <script>
     const nowTimeLbl = document.getElementById("now_time");
     const minutesLbl = document.getElementById("minutes");
@@ -160,23 +178,32 @@
     let passTime = 0;
     let wrapList = [];
     let lastStartDate = null;
+
     let isManuallyBlocked = false;
     let pauseStartTime = 0;
     let pausedDuration = 0;
 
+    const zeroPad = (num, digits) => String(num).padStart(digits, "0");
+
+    // URLパラメータ title を反映
     const params = new URLSearchParams(window.location.search);
     let customTitle = params.get("title");
     if (customTitle) {
       titleArea.textContent = customTitle;
       document.title = customTitle;
+    } else {
+      titleArea.textContent = "";
+      document.title = "";
     }
 
+    // タイトルクリックで変更（URLへ反映）
     titleArea.addEventListener("click", () => {
       const newTitle = prompt("新しいタイトルを入力してください：", titleArea.textContent);
       if (newTitle && newTitle.trim() !== "") {
-        customTitle = newTitle;
+        customTitle = newTitle.trim();
         titleArea.textContent = customTitle;
         document.title = customTitle;
+
         const newParams = new URLSearchParams(window.location.search);
         newParams.set("title", customTitle);
         const newUrl = `${window.location.pathname}?${newParams.toString()}`;
@@ -184,8 +211,7 @@
       }
     });
 
-    const zeroPad = (num, digits) => String(num).padStart(digits, "0");
-
+    // ブロック時間帯（24H）
     const blockedTimeRanges = [
       ["10:15", "10:25"], ["12:15", "13:00"], ["15:00", "15:10"],
       ["17:10", "17:20"], ["19:20", "19:30"], ["22:15", "22:25"],
@@ -196,7 +222,7 @@
       const now = new Date();
       const current = `${zeroPad(now.getHours(),2)}:${zeroPad(now.getMinutes(),2)}`;
       return blockedTimeRanges.some(([start, end]) => {
-        if (start > end) return current >= start || current < end;
+        if (start > end) return current >= start || current < end; // 日跨ぎ
         return current >= start && current < end;
       }) || isManuallyBlocked;
     };
@@ -219,6 +245,7 @@
       const now = new Date();
       nowTimeLbl.innerText = `${zeroPad(now.getHours(),2)}:${zeroPad(now.getMinutes(),2)}:${zeroPad(now.getSeconds(),2)}`;
 
+      // ブロック時：動いていたら停止
       if (isBlockedTime()) {
         if (timer) {
           pauseStartTime = new Date().getTime();
@@ -226,14 +253,18 @@
           timer = null;
         }
       } else {
-        if (!timer && startTime !== 0) {
+        // ブロック解除：開始済みで止まっていたら再開
+        if (!timer && startTime !== 0 && pauseStartTime) {
           pausedDuration += new Date().getTime() - pauseStartTime;
+          pauseStartTime = 0;
           timer = setInterval(countUp, 100);
         }
       }
 
+      // 開始ボタンは「未開始」の時だけ押せる
       startBtn.disabled = !(startTime === 0);
     };
+
     setInterval(updateNowTime, 1000);
     updateNowTime();
 
@@ -242,20 +273,28 @@
       pausedDuration = 0;
       pauseStartTime = 0;
       isManuallyBlocked = false;
+
       minutesLbl.innerText = zeroPad(0, 3);
       secondsLbl.innerText = zeroPad(0, 2);
+
       wrapList = [];
       wrapListDom.innerHTML = "";
+
       startTime = 0;
+      lastStartDate = null;
+
       endBtn.disabled = true;
       wrapBtn.disabled = true;
     };
 
     const startTimer = () => {
       if (timer || startTime !== 0 || isBlockedTime()) return;
+
       startTime = new Date().getTime();
       lastStartDate = new Date();
+
       timer = setInterval(countUp, 100);
+
       startBtn.disabled = true;
       wrapBtn.disabled = false;
     };
@@ -274,14 +313,19 @@
 
     const getBlockedDuration = (start, end) => {
       let total = 0;
+
       for (const [from, to] of blockedTimeRanges) {
         const [fh, fm] = from.split(":").map(Number);
         const [th, tm] = to.split(":").map(Number);
+
         let fromTime = new Date(start);
         fromTime.setHours(fh, fm, 0, 0);
+
         let toTime = new Date(start);
         toTime.setHours(th, tm, 0, 0);
-        if (from > to) toTime.setDate(toTime.getDate() + 1);
+
+        if (from > to) toTime.setDate(toTime.getDate() + 1); // 日跨ぎ
+
         if (end > fromTime && start < toTime) {
           const overlapStart = Math.max(start.getTime(), fromTime.getTime());
           const overlapEnd = Math.min(end.getTime(), toTime.getTime());
@@ -309,17 +353,22 @@
       li.className = "wrap_item";
       li.textContent = text;
       if (wrapTime >= 1800) li.classList.add("over30");
+
       wrapListDom.appendChild(li);
       wrapList.push(text);
+
       endBtn.disabled = false;
 
+      // ラップ押下で、次区間の起点を更新（停止中でも再開させるロジック）
       if (!timer && (isManuallyBlocked || isBlockedTime())) {
-        pausedDuration += new Date().getTime() - pauseStartTime;
+        pausedDuration += new Date().getTime() - (pauseStartTime || new Date().getTime());
         isManuallyBlocked = false;
+
         startTime = new Date().getTime();
         lastStartDate = new Date();
         pausedDuration = 0;
         passTime = 0;
+
         timer = setInterval(countUp, 100);
       } else if (timer) {
         startTime = now.getTime();
@@ -334,14 +383,18 @@
       const dateStr = `${zeroPad(now.getFullYear(),4)}${zeroPad(now.getMonth()+1,2)}${zeroPad(now.getDate(),2)}_${zeroPad(now.getHours(),2)}${zeroPad(now.getMinutes(),2)}${zeroPad(now.getSeconds(),2)}`;
       const titleSafe = (customTitle || "記録").replace(/[^a-zA-Z0-9一-龯_]/g, "_");
       const fileName = `${titleSafe}_ラップタイム_${dateStr}.txt`;
+
       const header = `【${customTitle || "ラップタイム"} 記録】\n\n`;
       const body = wrapList.join("\n");
+
       const blob = new Blob([header + body], { type: "text/plain" });
       const url = URL.createObjectURL(blob);
+
       const a = document.createElement("a");
       a.href = url;
       a.download = fileName;
       a.click();
+
       URL.revokeObjectURL(url);
     };
 
@@ -353,6 +406,7 @@
       wrapBtn.addEventListener("click", addWrap);
     });
 
+    // 秒クリック：手動ブロックON/OFF
     secondsLbl.addEventListener("click", () => {
       if (!isManuallyBlocked) {
         isManuallyBlocked = true;
@@ -364,11 +418,16 @@
       } else {
         isManuallyBlocked = false;
         pausedDuration += new Date().getTime() - pauseStartTime;
+        pauseStartTime = 0;
         if (!timer && startTime !== 0) {
           timer = setInterval(countUp, 100);
         }
       }
     });
   </script>
+
+  <!-- 外部JSを使う場合は「上の内蔵<script>を削除」して、これを有効化（※二重実行防止）
+  <script src="./script.js"></script>
+  -->
 </body>
 </html>
